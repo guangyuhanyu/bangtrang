@@ -204,7 +204,7 @@ const PYFONT='"Helvetica Neue",Arial,"Noto Sans",sans-serif';
 const SIZES={pen:[2,3,5,8,12],hl:[14,20,28,40],er:[12,24,40,70],tx:[28,36,48,64,84,110],gr:[70,90,110,140],stk:[36,56,84,120]};
 const BGS=['grid','plain','dot'], BGN={grid:'Lưới ô nhỏ',plain:'Trơn',dot:'Chấm'};
 const GRID=24;
-const TOOLS=[['pen','✎','P','Bút'],['hl','▬','H','Bút highlight'],['er','⌫','E','Tẩy'],['tx','文','T','Gõ chữ Hán'],['gr','田','G','Chèn ô 田/米字格 (bấm G lần nữa để đổi)'],['sel','⬚','V','Chọn / di chuyển'],['stk','★','X','Ký hiệu: ngôi sao, trái tim, mặt cười…']];
+const TOOLS=[['sel','⬚','V','Chọn / di chuyển'],['pen','✎','B','Bút'],['hl','▬','H','Bút dạ quang'],['er','⌫','E','Tẩy'],['tx','文','G','Gõ chữ'],['gr','田','Q','Chèn ô 田/米字格 (bấm Q lần nữa để đổi)'],['stk','★','⇧X','Ký hiệu: ngôi sao, trái tim, mặt cười…']];
 const tianSvg=c=>`url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><rect x='.5' y='.5' width='119' height='119' fill='none' stroke='${c}' stroke-opacity='.28' stroke-width='1'/><path d='M60 0V120M0 60H120' stroke='${c}' stroke-opacity='.22' stroke-dasharray='5 5'/></svg>`)}")`;
 document.documentElement.style.setProperty('--tian',tianSvg('#b7312c'));
 
@@ -497,6 +497,10 @@ lv.addEventListener('pointerdown',e=>{holdA=null;clearTimeout(holdT);
     else{if(!e.shiftKey)sel.clear();marq={x1:x,y1:y,x2:x,y2:y};act={tool:'marq'};render();liveDirty();}
   }
 });
+let lastPt=null;
+lv.addEventListener('pointermove',e=>{lastPt=pt(e);},true);
+lv.addEventListener('pointerleave',()=>{lastPt=null;});
+function stampKey(kind,p0){if(editing)commitEdit();const s=px(p0);const c=lastPt||toB(RC.left+W/2,RC.top+Hh/2);commit(page().objs.concat([{t:'k',id:uid(),k:kind,x:c.x-s/2,y:c.y-s/2,s}]));}
 lv.addEventListener('pointermove',e=>{
   if(act&&act.tool==='pan'){panBy(e.clientX-act.sx,e.clientY-act.sy);act.sx=e.clientX;act.sy=e.clientY;return;}
   const {x,y}=pt(e);
@@ -536,7 +540,7 @@ function endPointer(){
       const ids=new Set(a.orig.map(o=>o.id));const om=new Map(a.orig.map(o=>[o.id,o]));const before=cur.map(o=>ids.has(o.id)?om.get(o.id):o);
       h.u.push(before);h.r=[];render();save();}}
 }
-lv.addEventListener('pointerup',endPointer);lv.addEventListener('pointercancel',endPointer);
+lv.addEventListener('pointerup',e=>{endPointer(e);if(editing)setTimeout(focusEd,0);});lv.addEventListener('pointercancel',endPointer);
 lv.addEventListener('pointerleave',()=>{if(!act&&cursor){cursor=null;liveDirty();}});
 lv.addEventListener('dblclick',e=>{if(S.tool!=='sel')return;const q=pt(e);const h=hitObj(q.x,q.y);if(h&&h.t==='x'){if(e.shiftKey)editPinyin(h);else openEditor(h);}});
 
@@ -695,7 +699,7 @@ function addImageFile(file,x,y){
     commit(page().objs.concat([o]));setTool('sel');sel.clear();sel.add(o.id);render();toast('Đã dán ảnh – kéo để di chuyển, kéo góc để đổi cỡ');
   };im.src=fr.result;};fr.readAsDataURL(file);
 }
-document.addEventListener('paste',e=>{if(editing)return;const items=(e.clipboardData||{}).items||[];for(const it of items){if(it.type&&it.type.indexOf('image')===0){e.preventDefault();addImageFile(it.getAsFile());return;}}
+document.addEventListener('paste',e=>{if(editing||(e.target&&e.target.closest&&e.target.closest('input,textarea,[contenteditable="true"],#help')))return;const items=(e.clipboardData||{}).items||[];for(const it of items){if(it.type&&it.type.indexOf('image')===0){e.preventDefault();addImageFile(it.getAsFile());return;}}
   const t=e.clipboardData&&e.clipboardData.getData('text/plain');if(t&&t.trim()){e.preventDefault();const z=px(SIZES.tx[S.si.tx]),cc=toB(RC.left+W/2,RC.top+Hh/2);const o={t:'x',id:uid(),x:cc.x-t.length*z/4,y:cc.y-z,s:t.trim(),z,c:PENS[S.pen][0],f:S.font,py:null};commit(page().objs.concat([o]));}});
 document.addEventListener('dragover',e=>e.preventDefault());
 document.addEventListener('drop',e=>{e.preventDefault();const f=[...(e.dataTransfer.files||[])].find(f=>f.type.indexOf('image')===0);if(f){const q=toB(e.clientX,e.clientY);addImageFile(f,q.x,q.y);}});
@@ -712,11 +716,11 @@ function buildBar(){
   const tk=SZKEY();const sz=SIZES[tk][S.si[tk]];const vis=tk==='tx'?Math.min(24,sz/4):tk==='gr'?Math.min(24,sz/6):Math.min(26,Math.max(3,tk==='er'?sz/3:sz));
   h+=`<button class="tb" data-a="size" title="Chọn cỡ nét / cỡ chữ – phím [ nhỏ lại, ] to lên"><div id="szv"><span style="width:${vis}px;height:${vis}px;background:${tk==='hl'?HLS[S.hl][0]:tk==='er'?'#fff;border:1px solid #888':PENS[S.pen][0]}"></span></div><i>[ ]</i></button>`;
   h+=`<button class="tb${S.py?' on':''}" data-a="py" title="Hiện / ẩn pinyin (Y)"><b>拼</b><i>Y</i></button>`;
-  h+=`<button class="tb" data-a="font" title="Đổi font chữ Hán (K): 楷 Khải ↔ 圆 Viết tay tròn"><b>${FN(S.font)[0]}</b><i>K</i></button>`;
-  h+=`<button class="tb" data-a="bg" title="Đổi nền trang (B): ${BGN[page().bg]}"><b>${page().bg==='grid'?'⊞':page().bg==='dot'?'⁙':'□'}</b><i>B</i></button>`;
+  h+=`<button class="tb" data-a="font" title="Đổi font chữ Hán (⇧G): 楷 Khải ↔ 圆 Viết tay tròn"><b>${FN(S.font)[0]}</b><i>⇧G</i></button>`;
+  h+=`<button class="tb" data-a="bg" title="Đổi nền trang (⇧B): ${BGN[page().bg]}"><b>${page().bg==='grid'?'⊞':page().bg==='dot'?'⁙':'□'}</b><i>⇧B</i></button>`;
   h+='<div class="sep"></div>';
-  h+=`<button class="tb" data-a="undo" title="Hoàn tác (${CMD}+Z)"><b>↶</b><i>${CMD}Z</i></button>`;
-  h+=`<button class="tb" data-a="redo" title="Làm lại (${CMD}+Shift+Z)"><b>↷</b><i>⇧${CMD}Z</i></button>`;
+  h+=`<button class="tb" data-a="undo" title="Hoàn tác (Z)"><b>↶</b><i>Z</i></button>`;
+  h+=`<button class="tb" data-a="redo" title="Làm lại (⇧Z)"><b>↷</b><i>⇧Z</i></button>`;
   h+=`<button class="tb${S.ah?' on':''}" data-a="ah" title="Tự ẩn thanh công cụ (A)"><b>${S.ah?'⇡':'📌'}</b><i>A</i></button>`;
   h+=`<button class="tb" data-a="help" title="Phím tắt & cài đặt (?)"><b>☰</b><i>?</i></button>`;
   bar.innerHTML=h;applyBar();
@@ -817,19 +821,20 @@ function showHelp(on){
   if(on===false){$('#help').classList.remove('show');return;}
   const K=(...k)=>k.map(x=>`<kbd>${x}</kbd>`).join(' ');
   const rows=[
-    [K('P'),'Bút viết'],[K('H'),'Bút highlight (dạ quang)'],[K('E'),'Tẩy (đầu tẩy của bút vẽ cũng tẩy được)'],[K('R')+' / '+K('L'),'Bút laze chỉ trỏ (bật/tắt) · 1–6 đổi màu laze · Esc tắt'],[K('Giữ yên'),'Đang kẻ, dừng tay ~0,6 giây → nét tự thành đường thẳng (gần ngang/dọc/chéo thì tự nắn thẳng)'],
-    [K('T'),'Gõ chữ Hán (bấm lên bảng rồi gõ pinyin)'],[K('G'),'Chèn ô chữ – kéo ngang để ra 1 hàng ô; bấm G lần nữa đổi 田/米'],[K('V'),'Chọn, kéo di chuyển; kéo ô vuông ở góc để phóng to/thu nhỏ'],
-    [K('1','–','6'),'Đổi màu bút (khi dùng highlight: 1–4)'],[K('[',']'),'Nhỏ / to nét bút, cỡ chữ, cỡ ô'],[K('Y'),'Hiện / ẩn pinyin (đang chọn chữ thì chỉ đổi chữ đó)'],
-    [K('K'),'Đổi font chữ Hán: 楷 Khải ↔ 圆 Viết tay tròn'],[K('X'),'Ký hiệu: sao, tim, mặt cười, mặt khóc, 好, 棒, 100… (bấm X lần nữa để chọn)'],[K('B'),'Đổi nền: lưới ô nhỏ → trơn → chấm'],[K('Space')+' + kéo','Kéo bảng (bảng vô hạn); trackpad: 2 ngón để kéo, chụm để phóng to'],[K('=')+' '+K('-'),'Phóng to / thu nhỏ'],[K('0'),'Về vị trí gốc, 100%'],[K('9'),'Xem toàn bộ nội dung'],[K('Shift')+' + kéo','Kẻ đường thẳng'],
-    [K(CMD,'Z'),'Hoàn tác'],[K('⇧',CMD,'Z'),'Làm lại'],[K(CMD,'V'),'Dán ảnh chụp màn hình lên bảng'],
-    [K('Delete'),'Xoá đối tượng đang chọn'],[K(CMD,'A'),'Chọn tất cả'],[K('PageUp')+' '+K('PageDown'),'Chuyển trang'],[K('←')+K('→')+K('↑')+K('↓'),'Kéo bảng (khi không chọn gì)'],
-    [K('N'),'Thêm trang mới'],[K('Tab'),'Hiện / ẩn thanh công cụ (mặc định ẩn)'],[K('A'),'Bật/tắt tự ẩn thanh công cụ (đưa chuột lên mép trên để hiện)'],[K(CMD,'S'),'Lưu trang thành ảnh PNG'],
-    [K('Esc'),OVERLAY?'Đóng bảng, quay lại trang web':'Bỏ chọn'],[K('?'),'Mở bảng này']
+    [K('V'),'Chọn, kéo di chuyển; kéo ô vuông ở góc để đổi cỡ'],[K('B'),'Bút viết'],[K('H'),'Bút dạ quang'],[K('E'),'Tẩy (đầu tẩy của bút vẽ cũng tẩy được)'],[K('G'),'Gõ chữ (bấm lên bảng rồi gõ pinyin)'],
+    [K('D'),'Dán dấu ✓ tại vị trí chuột'],[K('S'),'Dán dấu ✗ tại vị trí chuột'],[K('⇧','D'),'Dán con dấu 棒'],[K('⇧','X'),'Bảng ký hiệu: sao, tim, mặt cười…'],[K('R'),'Bút laze (chấm đỏ lớn) bật / tắt'],
+    [K('1','–','6'),'Đổi màu'],[K('7')+' '+K('8')+' '+K('9'),'Cỡ nhỏ / vừa / lớn (đang chọn ô chữ thì đổi cỡ ô chữ đó)'],[K('[',']'),'Nhỏ / to dần'],
+    [K('Y'),'Hiện / ẩn pinyin'],[K('⇧','G'),'Đổi font: 楷 Khải ↔ 圆 Viết tay tròn'],[K('Q'),'Chèn ô 田字格 – kéo ngang ra 1 hàng; Q lần nữa đổi 田/米'],
+    [K('Z'),'Hoàn tác'],[K('⇧','Z'),'Làm lại'],[K('X'),'Xoá hết trang này'],['Giữ yên tay','Đang kẻ, dừng tay ~0,6 giây → thành đường thẳng'],[K('Shift')+' + kéo','Kẻ đường thẳng'],
+    [K('⇧','B'),'Đổi nền: lưới ô → trơn → chấm'],[K('Space')+' + kéo','Kéo bảng; trackpad: 2 ngón kéo, chụm để phóng to'],[K('=')+' '+K('-'),'Phóng to / thu nhỏ'],[K('0'),'Về vị trí gốc, 100%'],[K('⇧','0'),'Xem toàn bộ nội dung'],
+    [K(CMD,'V'),'Dán ảnh chụp màn hình lên bảng'],[K('Delete'),'Xoá đối tượng đang chọn'],[K('PageUp')+' '+K('PageDown'),'Chuyển trang'],[K('N'),'Thêm trang mới'],[K('←')+K('→')+K('↑')+K('↓'),'Kéo bảng (khi không chọn gì)'],
+    [K('M'),'Hiện / ẩn thanh công cụ (Tab cũng được)'],[K('A'),'Tự ẩn thanh công cụ'],[K('K'),'Lưu trang thành ảnh PNG'],
+    [K('Esc'),OVERLAY?'Về công cụ chọn; bấm lần nữa để đóng bảng':'Về công cụ chọn (V)'],[K('?'),'Mở bảng này']
   ];
   const ime=[[K('a–z'),'Gõ pinyin không dấu, vd. nihao, xuesheng; gõ tắt chữ cái đầu: nh → 你好'],[K('Space')+' '+K('1–9'),'Chọn chữ'],[K('-')+' '+K('='),'Lật trang gợi ý'],[K('Shift'),'Đổi 中 / 英 (gõ tiếng Việt/Anh)'],[K('Enter'),'Xuống dòng (đang gõ dở thì giữ nguyên chữ cái)'],[K(CMD,'Enter')+' / '+K('Esc'),'Xong, đặt chữ lên bảng'],[K('Shift')+' + nhấp đúp','(công cụ V) sửa pinyin đa âm']];
   const g=a=>'<div class="grid">'+a.map(([k,v])=>`<div>${k}<span>${v}</span></div>`).join('')+'</div>';
   $('#hp').innerHTML=`<h2>Bảng trắng Guangyu Hanyu – phím tắt</h2><div style="font-size:13px;color:#8a8172">Bảng tự lưu sau mỗi nét viết. Mọi phím tắt dùng khi chưa bấm vào ô gõ chữ.</div>
-  <h3>Công cụ</h3>${g(rows)}<h3>Bộ gõ Hán tự (công cụ T)</h3>${g(ime)}
+  <h3>Công cụ</h3>${g(rows)}<h3>Bộ gõ Hán tự (công cụ G)</h3>${g(ime)}
   <h3>Mở nhanh bảng đè lên trang web đang chiếu (Safari)</h3>
   <ol><li>Bật thanh Mục ưa thích: menu <b>Hiển thị → Hiển thị thanh Mục ưa thích</b> (${K('⇧',CMD,'B')}).</li>
   <li>Kéo nút đỏ bên dưới thả lên thanh Mục ưa thích, đặt ở <b>vị trí đầu tiên</b>.<br><a id="bm" href="#">✎ Bảng trắng</a></li>
@@ -850,13 +855,23 @@ $('#help').addEventListener('pointerdown',e=>{if(e.target.id==='help')showHelp(f
 function toggleFS(){const d=document,el=d.documentElement;if(d.fullscreenElement||d.webkitFullscreenElement){(d.exitFullscreen||d.webkitExitFullscreen).call(d);}else{(el.requestFullscreen||el.webkitRequestFullscreen).call(el);}}
 
 /* ---------- keyboard ---------- */
+
+/* ===== bộ phím thống nhất với gy-tools ===== */
+const PRE={pen:[0,2,3],hl:[0,1,3],er:[0,1,3],tx:[1,2,3],stk:[0,1,3],gr:[0,2,3]},PREN=['nhỏ','vừa','lớn'];
+function sizePreset(i){const ts=selObjs().filter(o=>o.t==='x'||o.t==='k');
+  if(ts.length){commit(page().objs.map(o=>!sel.has(o.id)?o:o.t==='x'?Object.assign({},o,{z:px(SIZES.tx[PRE.tx[i]])}):o.t==='k'?Object.assign({},o,{s:px(SIZES.stk[PRE.stk[i]])}):o));toast('Cỡ chữ: '+PREN[i]);return;}
+  const k=SZKEY();if(PRE[k])S.si[k]=PRE[k][i];buildBar();liveDirty();toast('Cỡ '+({pen:'nét bút',hl:'highlight',er:'tẩy',tx:'chữ',stk:'ký hiệu',gr:'ô chữ'}[k]||'nét')+': '+PREN[i]);save();}
+function keepTyping(e){if(document.activeElement===ed)return;focusEd();
+  const ev=new KeyboardEvent('keydown',{key:e.key,code:e.code,shiftKey:e.shiftKey,metaKey:e.metaKey,ctrlKey:e.ctrlKey,altKey:e.altKey,bubbles:true,cancelable:true});
+  ed.dispatchEvent(ev);if(ev.defaultPrevented)e.preventDefault();}
+function toolKey(t,e){e.preventDefault();setTool(t);flashBar();if(!S.bar){const tt=TOOLS.find(x=>x[0]===t);if(tt)toast(tt[1]+' '+tt[3]);}}
 addEventListener('keydown',e=>{
-  if(editing)return;
+  if(editing){keepTyping(e);return;}
   const helpOpen=$('#help').classList.contains('show');
   if(helpOpen){if(e.key==='Escape'||e.key==='?'){e.preventDefault();showHelp(false);}return;}
-  const mod=e.metaKey||e.ctrlKey,c=e.code,k=e.key;
+  const mod=e.metaKey||e.ctrlKey,c=e.code,k=e.key,sh=e.shiftKey;
   if(mod){
-    if(c==='KeyZ'){e.preventDefault();e.shiftKey?redo():undo();}
+    if(c==='KeyZ'){e.preventDefault();sh?redo():undo();}
     else if(c==='KeyY'){e.preventDefault();redo();}
     else if(c==='KeyS'){e.preventDefault();exportPNG();}
     else if(c==='KeyA'){e.preventDefault();setTool('sel');page().objs.forEach(o=>sel.add(o.id));render();}
@@ -865,34 +880,46 @@ addEventListener('keydown',e=>{
   }
   if(e.altKey)return;
   if(k===' '){e.preventDefault();if(!spaceDown){spaceDown=true;lv.classList.add('pan');}return;}
+  if(sh){
+    if(c==='KeyD'){e.preventDefault();stampKey('bang',36);return;}
+    if(c==='KeyZ'){e.preventDefault();redo();return;}
+    if(c==='KeyG'){e.preventDefault();cycleFont();return;}
+    if(c==='KeyB'){e.preventDefault();cycleBg();return;}
+    if(c==='KeyX'){toolKey('stk',e);return;}
+    if(c==='Digit0'){e.preventDefault();fitAll();return;}
+  }
+  if(k==='?'||(c==='Slash'&&sh)){e.preventDefault();showHelp(true);return;}
+  if(sh&&/^(Key|Digit)/.test(c))return;
+  const map={KeyV:'sel',KeyB:'pen',KeyP:'pen',KeyH:'hl',KeyE:'er',KeyG:'tx',KeyT:'tx'};
+  if(map[c]){toolKey(map[c],e);return;}
+  if(c==='KeyQ'){e.preventDefault();if(S.tool==='gr'){S.gk=S.gk==='tian'?'mi':'tian';toast(S.gk==='mi'?'Ô 米字格':'Ô 田字格');}setTool('gr');flashBar();return;}
+  if(c==='KeyD'){e.preventDefault();stampKey('check',30);return;}
+  if(c==='KeyS'){e.preventDefault();stampKey('cross',30);return;}
+  if(c==='KeyZ'){e.preventDefault();undo();return;}
+  if(c==='KeyX'){e.preventDefault();if(!page().objs.length)return toast('Trang đang trống');if(confirm('Xoá hết nội dung trang này? (bấm Z để hoàn tác)'))commit([]);return;}
+  if(c==='KeyY'){e.preventDefault();togglePy();return;}
+  if(c==='KeyK'){e.preventDefault();exportPNG();return;}
+  if(c==='KeyM'||k==='Tab'){e.preventDefault();S.bar=!S.bar;buildBar();save();return;}
+  if(c==='KeyN'){e.preventDefault();addPage();return;}
+  if(c==='KeyA'){e.preventDefault();toggleAH();return;}
+  if(c==='KeyF'&&!OVERLAY){e.preventDefault();toggleFS();return;}
   if(c==='Digit0'){e.preventDefault();homeView();return;}
-  if(c==='Digit9'){e.preventDefault();fitAll();return;}
   if(c==='Equal'){e.preventDefault();zoomAt(W/2,Hh/2,1.25);return;}
   if(c==='Minus'){e.preventDefault();zoomAt(W/2,Hh/2,.8);return;}
-  const map={KeyP:'pen',KeyH:'hl',KeyE:'er',KeyT:'tx',KeyV:'sel',KeyX:'stk'};
-  if(map[c]){e.preventDefault();setTool(map[c]);flashBar();if(!S.bar){const tt=TOOLS.find(x=>x[0]===map[c]);if(tt)toast(tt[1]+' '+tt[3]);}return;}
-  if(c==='KeyG'){e.preventDefault();if(S.tool==='gr'){S.gk=S.gk==='tian'?'mi':'tian';toast(S.gk==='mi'?'Ô 米字格':'Ô 田字格');}setTool('gr');return;}
-  if(c==='KeyB'){e.preventDefault();cycleBg();return;}
-  if(c==='KeyY'){e.preventDefault();togglePy();return;}
-  if(c==='KeyK'){e.preventDefault();cycleFont();return;}
-  if(c==='KeyN'){e.preventDefault();addPage();return;}
-  if(c==='KeyF'&&!OVERLAY){e.preventDefault();toggleFS();return;}
-  if(/^Digit[1-8]$/.test(c)){e.preventDefault();setColor(+c.slice(5)-1);flashBar();return;}
+  if(/^Digit[1-6]$/.test(c)){e.preventDefault();setColor(+c.slice(5)-1);flashBar();return;}
+  if(/^Digit[7-9]$/.test(c)){e.preventDefault();sizePreset(+c.slice(5)-7);return;}
   if(c==='BracketLeft'){e.preventDefault();cycleSize(-1);return;}
   if(c==='BracketRight'){e.preventDefault();cycleSize(1);return;}
-  if(c==='KeyA'){e.preventDefault();toggleAH();return;}
-  if(k==='Tab'){e.preventDefault();S.bar=!S.bar;buildBar();save();return;}
-  if(k==='?'||(c==='Slash'&&e.shiftKey)){e.preventDefault();showHelp(true);return;}
   if(k==='PageDown'){e.preventDefault();goPage(D.cur+1);return;}
   if(k==='PageUp'){e.preventDefault();goPage(D.cur-1);return;}
   if(k==='ArrowLeft'||k==='ArrowRight'||k==='ArrowUp'||k==='ArrowDown'){
     e.preventDefault();
-    if(sel.size){const s=px(e.shiftKey?10:2);const dx=k==='ArrowLeft'?-s:k==='ArrowRight'?s:0,dy=k==='ArrowUp'?-s:k==='ArrowDown'?s:0;commit(page().objs.map(o=>sel.has(o.id)?moveObj(o,dx,dy):o));}
-    else{const d=e.shiftKey?300:120;panBy(k==='ArrowLeft'?d:k==='ArrowRight'?-d:0,k==='ArrowUp'?d:k==='ArrowDown'?-d:0);}
+    if(sel.size){const s=px(sh?10:2);const dx=k==='ArrowLeft'?-s:k==='ArrowRight'?s:0,dy=k==='ArrowUp'?-s:k==='ArrowDown'?s:0;commit(page().objs.map(o=>sel.has(o.id)?moveObj(o,dx,dy):o));}
+    else{const d=sh?300:120;panBy(k==='ArrowLeft'?d:k==='ArrowRight'?-d:0,k==='ArrowUp'?d:k==='ArrowDown'?-d:0);}
     return;}
-  if(k==='Delete'||k==='Backspace'){e.preventDefault();if(sel.size){commit(page().objs.filter(o=>!sel.has(o.id)));sel.clear();render();}else if(e.shiftKey)delPage();return;}
+  if(k==='Delete'||k==='Backspace'){e.preventDefault();if(sel.size){commit(page().objs.filter(o=>!sel.has(o.id)));sel.clear();render();}else if(sh)delPage();return;}
   if(k==='Enter'&&S.tool==='sel'&&sel.size===1){const o=selObjs()[0];if(o.t==='x'){e.preventDefault();openEditor(o);}return;}
-  if(k==='Escape'){e.preventDefault();if(sel.size){sel.clear();render();}else if(OVERLAY)closeBoard();return;}
+  if(k==='Escape'){e.preventDefault();if(sel.size){sel.clear();render();}else if(S.tool!=='sel'){setTool('sel');toast('⬚ Chọn / di chuyển');}else if(OVERLAY)closeBoard();return;}
 });
 addEventListener('keyup',e=>{if(e.key===' '&&spaceDown){spaceDown=false;lv.classList.remove('pan');}});
 addEventListener('blur',()=>{if(spaceDown){spaceDown=false;lv.classList.remove('pan');}});
@@ -906,70 +933,40 @@ lv.addEventListener('gesturechange',e=>{e.preventDefault();const f=e.scale/gS;gS
 lv.addEventListener('gestureend',e=>e.preventDefault());
 
 /* ---------- init ---------- */
-load().then(()=>{S.bar=false;resize();buildBar();updZoom();setTimeout(()=>toast('Bấm Tab để hiện thanh công cụ · ? xem phím tắt'),700);setTool(S.tool==='tx'||S.tool==='laser'?'pen':S.tool);setSaved('ok');if(!localStorageGet('gy-seen')){localStorageSet('gy-seen','1');setTimeout(()=>toast('Bấm ? để xem phím tắt'),600);}try{window.focus();}catch(e){}});
+load().then(()=>{S.bar=false;S.si.pen=0;S.si.hl=1;S.si.tx=2;resize();buildBar();updZoom();setTimeout(()=>toast('Bấm Tab để hiện thanh công cụ · ? xem phím tắt'),700);setTool(S.tool==='tx'||S.tool==='laser'?'pen':S.tool);setSaved('ok');if(!localStorageGet('gy-seen')){localStorageSet('gy-seen','1');setTimeout(()=>toast('Bấm ? để xem phím tắt'),600);}try{window.focus();}catch(e){}});
 function localStorageGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
 function localStorageSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 window.__wb={get D(){return D},get S(){return S},getCands,segment,render};
 })();
 </script>
-<!-- Bút laze Guangyu Hanyu · R (hoặc L) bật/tắt · 1–6 đổi màu · Esc tắt -->
+<!-- Bút laze Guangyu Hanyu · R (hoặc L) bật/tắt · Esc tắt · chấm tròn lớn kiểu Canva -->
 <script>
 (function(){
   if (window.__gyLaser) return; window.__gyLaser = 1;
-  var COLORS = ['#e53935','#1e88e5','#222222','#2eaa4a','#d81b60','#fb8c00'];
-  var NAMES  = ['đỏ tươi','xanh dương','đen','xanh lá','hồng cánh sen','cam'];
-  var color = COLORS[0], on = false, pts = [], last = null, inside = false, running = false, LIFE = 650;
-  var st = document.createElement('style');
-  st.textContent = '#gyLaser{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;pointer-events:none;display:none}'
-    + 'html.gyLaserOn #gyLaser{display:block}html.gyLaserOn,html.gyLaserOn *{cursor:none!important}'
-    + '#gyLaserTip{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147483001;background:rgba(66,89,97,.94);color:#F9F3E3;font:600 14px/1.4 "Be Vietnam Pro",system-ui,sans-serif;padding:7px 14px;border-radius:10px;display:none;pointer-events:none}';
+  var on=false,x=-99,y=-99,raf=0;
+  var st=document.createElement('style');
+  st.textContent='#gyDot{position:fixed;left:0;top:0;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;z-index:2147483000;pointer-events:none;display:none;will-change:transform;'
+    +'background:radial-gradient(circle,#fff 0 16%,#ff5a4e 30%,rgba(229,57,53,.9) 46%,rgba(229,57,53,.35) 62%,rgba(229,57,53,0) 72%);box-shadow:0 0 18px 4px rgba(229,57,53,.35)}'
+    +'html.gyLaserOn #gyDot.in{display:block}html.gyLaserOn,html.gyLaserOn *{cursor:none!important}'
+    +'#gyLaserTip{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147483001;background:rgba(66,89,97,.94);color:#F9F3E3;font:600 14px/1.4 "Be Vietnam Pro",system-ui,sans-serif;padding:7px 14px;border-radius:10px;display:none;pointer-events:none}';
   document.head.appendChild(st);
-  var cv = document.createElement('canvas'); cv.id = 'gyLaser'; document.body.appendChild(cv);
-  var tip = document.createElement('div'); tip.id = 'gyLaserTip'; document.body.appendChild(tip);
-  var ctx = cv.getContext('2d');
-  function say(t){ tip.textContent = t; tip.style.display = 'block'; clearTimeout(say.k); say.k = setTimeout(function(){ tip.style.display = 'none'; }, 1400); }
-  function size(){ var d = window.devicePixelRatio || 1; cv.width = innerWidth * d; cv.height = innerHeight * d; ctx.setTransform(d,0,0,d,0,0); }
-  function rgba(h,a){ var n = parseInt(h.slice(1),16); return 'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')'; }
-  function draw(){
-    var now = performance.now();
-    ctx.clearRect(0,0,innerWidth,innerHeight);
-    while (pts.length && now - pts[0].t > LIFE) pts.shift();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (var i = 1; i < pts.length; i++){
-      var a = pts[i-1], b = pts[i], k = 1 - (now - b.t) / LIFE; if (k <= 0) continue;
-      ctx.strokeStyle = rgba(color, 0.55*k); ctx.lineWidth = 2 + 6*k;
-      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-    }
-    if (last && inside){
-      var g = ctx.createRadialGradient(last.x,last.y,0,last.x,last.y,16);
-      g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(0.22,'rgba(255,255,255,.95)');
-      g.addColorStop(0.35, rgba(color,.95)); g.addColorStop(1, rgba(color,0));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(last.x,last.y,16,0,Math.PI*2); ctx.fill();
-    }
-    if (on && pts.length > 1) requestAnimationFrame(draw); else running = false;
-  }
-  function kick(){ if (!running){ running = true; requestAnimationFrame(draw); } }
-  function setOn(v){
-    on = v; document.documentElement.classList.toggle('gyLaserOn', v);
-    if (v){ size(); kick(); say('Bút laze · ' + NAMES[COLORS.indexOf(color)]); }
-    else { pts = []; last = null; ctx.clearRect(0,0,innerWidth,innerHeight); say('Tắt bút laze'); }
-  }
-  window.gyLaserToggle = function(){ setOn(!on); };
-  addEventListener('pointermove', function(e){
-    if (!on) return; inside = true; last = {x:e.clientX, y:e.clientY};
-    pts.push({x:e.clientX, y:e.clientY, t:performance.now()}); if (pts.length > 120) pts.shift(); kick();
-  }, true);
-  document.documentElement.addEventListener('mouseleave', function(){ inside = false; kick(); });
-  addEventListener('resize', function(){ if (on) size(); });
-  addEventListener('keydown', function(e){
-    var t = e.target;
-    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-    var c = e.code;
-    if (c === 'KeyR' || c === 'KeyL'){ e.preventDefault(); e.stopImmediatePropagation(); setOn(!on); }
-    else if (on && e.key === 'Escape'){ e.preventDefault(); e.stopImmediatePropagation(); setOn(false); }
-    else if (on && /^Digit[1-6]$/.test(c)){ e.preventDefault(); e.stopImmediatePropagation(); var n=+c.slice(5); color = COLORS[n-1]; say('Bút laze · ' + NAMES[n-1]); }
-  }, true);
+  var dot=document.createElement('div');dot.id='gyDot';document.body.appendChild(dot);
+  var tip=document.createElement('div');tip.id='gyLaserTip';document.body.appendChild(tip);
+  function say(t){tip.textContent=t;tip.style.display='block';clearTimeout(say.k);say.k=setTimeout(function(){tip.style.display='none';},1300);}
+  function place(){raf=0;dot.style.transform='translate('+x+'px,'+y+'px)';}
+  function setOn(v){on=v;document.documentElement.classList.toggle('gyLaserOn',v);if(v){dot.classList.toggle('in',x>-50);place();say('Bút laze · bấm R để tắt');}else say('Tắt bút laze');}
+  window.gyLaserToggle=function(){setOn(!on);};
+  addEventListener('pointermove',function(e){x=e.clientX;y=e.clientY;if(!on)return;dot.classList.add('in');if(!raf)raf=requestAnimationFrame(place);},true);
+  addEventListener('pointerdown',function(e){x=e.clientX;y=e.clientY;if(on){dot.classList.add('in');place();}},true);
+  document.documentElement.addEventListener('mouseleave',function(){dot.classList.remove('in');});
+  addEventListener('keydown',function(e){
+    var t=e.target,ed=document.getElementById('ed');
+    if(ed&&ed.style.display==='block')return;
+    if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))return;
+    if(e.metaKey||e.ctrlKey||e.altKey||e.shiftKey)return;
+    if(e.code==='KeyR'||e.code==='KeyL'){e.preventDefault();e.stopImmediatePropagation();setOn(!on);}
+    else if(on&&e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();setOn(false);}
+  },true);
 })();
 </script>
 </body>
